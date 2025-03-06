@@ -1,0 +1,64 @@
+```python
+import pytest
+from pymongo import MongoClient
+from unittest.mock import Mock, patch
+from fastapi.testclient import TestClient
+from main import app, process_order
+from db import get_db
+from enums import OrderStatus
+from exceptions.common import DeliveryRegistrationError
+from models.models import Order
+
+@pytest.fixture
+def test_db():
+    client = MongoClient()
+    db = client["test_config"]
+    yield db
+    client.drop_database("test_config")
+
+@pytest.fixture
+def mock_delivery():
+    with patch("main.ByCicleAPI") as mock:
+        yield mock
+
+@pytest.fixture
+def test_client():
+    return TestClient(app)
+
+def test_process_order_success(test_db, mock_delivery):
+    # Setup mock delivery response
+    mock_instance = mock_delivery.return_value
+    mock_instance.register_order.return_value = {"status": OrderStatus.DELIVERED}
+    
+    # Test data
+    test_order = {"id": "123", "items": ["item1"], "address": "test address"}
+    
+    # Execute
+    result = process_order(test_order, test_db)
+    
+    # Verify database
+    db_order = test_db.orders.find_one({"id": "123"})
+    assert db_order["status"] == OrderStatus.DELIVERED
+    assert result.status == OrderStatus.DELIVERED
+
+def test_process_order_failure(test_db, mock_delivery):
+    # Setup mock to throw error
+    mock_instance = mock_delivery.return_value
+    mock_instance.register_order.side_effect = DeliveryRegistrationError()
+    
+    # Test data
+    test_order = {"id": "456", "items": ["item2"], "address": "invalid address"}
+    
+    # Execute
+    result = process_order(test_order, test_db)
+    
+    # Verify database
+    db_order = test_db.orders.find_one({"id": "456"})
+    assert db_order["status"] == OrderStatus.FAILED
+    assert result.status == OrderStatus.FAILED
+
+def test_root_endpoint(test_client):
+    response = test_client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"hello": "world"}
+```

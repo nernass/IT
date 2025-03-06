@@ -1,0 +1,1 @@
+docker run --name mongodb -d -v integration_test_api:/data/db -p 27017:27017 mongo
