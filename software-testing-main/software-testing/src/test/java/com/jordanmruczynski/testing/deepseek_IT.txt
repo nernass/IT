@@ -1,0 +1,97 @@
+```java
+package com.jordanmruczynski.testing;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jordanmruczynski.testing.customer.Customer;
+import com.jordanmruczynski.testing.customer.CustomerRegistrationController;
+import com.jordanmruczynski.testing.customer.CustomerRegistrationRequest;
+import com.jordanmruczynski.testing.customer.CustomerRepository;
+import com.jordanmruczynski.testing.payment.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.math.BigDecimal;
+import java.util.Optional;
+import java.util.UUID;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class PaymentIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @MockBean
+    private CustomerRepository customerRepository;
+
+    @MockBean
+    private PaymentRepository paymentRepository;
+
+    @MockBean
+    private CardPaymentCharger cardPaymentCharger;
+
+    private UUID customerId;
+    private Customer customer;
+
+    @BeforeEach
+    void setup() {
+        customerId = UUID.randomUUID();
+        customer = new Customer(customerId, "John Doe", "123456789");
+        when(customerRepository.findById(customerId)).thenReturn(Optional.of(customer));
+    }
+
+    @Test
+    void registerCustomer_ValidRequest_SavesCustomer() throws Exception {
+        CustomerRegistrationRequest request = new CustomerRegistrationRequest(customer);
+        when(customerRepository.existsCustomerByPhoneNumber(any())).thenReturn(false);
+
+        mockMvc.perform(put("/api/v1/customer-registration")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk());
+
+        verify(customerRepository).save(customer);
+    }
+
+    @Test
+    void makePayment_ValidRequest_ChargesCardAndSavesPayment() throws Exception {
+        Payment payment = new Payment(null, customerId, BigDecimal.TEN, Currency.USD, "card_123", "test");
+        PaymentRequest paymentRequest = new PaymentRequest(payment);
+        when(cardPaymentCharger.chargeCard(any(), any(), any(), any()))
+                .thenReturn(new CardPaymentCharge(true));
+
+        mockMvc.perform(put("/api/v1/payment")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(paymentRequest)))
+                .andExpect(status().isOk());
+
+        verify(paymentRepository).save(any(Payment.class));
+    }
+
+    @Test
+    void makePayment_InvalidCurrency_ThrowsException() throws Exception {
+        Payment payment = new Payment(null, customerId, BigDecimal.TEN, Currency.EUR, "card_123", "test");
+        PaymentRequest paymentRequest = new PaymentRequest(payment);
+
+        mockMvc.perform(put("/api/v1/payment")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(paymentRequest)))
+                .andExpect(status().isBadRequest());
+    }
+}
+```

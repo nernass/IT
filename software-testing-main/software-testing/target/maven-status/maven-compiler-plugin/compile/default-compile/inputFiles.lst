@@ -1,0 +1,17 @@
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/customer/Customer.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/PaymentService.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/Payment.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/stripe/MockStripeService.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/customer/CustomerRegistrationService.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/stripe/StripeService.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/customer/CustomerRegistrationRequest.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/customer/CustomerRegistrationController.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/CardPaymentCharger.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/customer/CustomerRepository.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/CardPaymentCharge.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/Currency.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/PaymentController.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/PaymentRequest.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/stripe/StripeApi.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/payment/PaymentRepository.java
+/Users/jordanmruczynski/Desktop/new/software-testing/src/main/java/com/amigoscode/testing/TestingApplication.java

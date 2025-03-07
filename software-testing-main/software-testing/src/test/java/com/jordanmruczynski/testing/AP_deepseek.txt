@@ -1,0 +1,83 @@
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+import java.math.BigDecimal;
+import java.util.Optional;
+import java.util.UUID;
+
+import com.jordanmruczynski.testing.customer.*;
+import com.jordanmruczynski.testing.payment.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+
+@SpringBootTest
+class PaymentSystemIntegrationTest {
+
+    @Autowired
+    private PaymentController paymentController;
+
+    @Autowired
+    private CustomerRegistrationController customerController;
+
+    @Autowired
+    private CustomerRepository customerRepository;
+
+    @Autowired
+    private PaymentRepository paymentRepository;
+
+    @MockBean
+    private CardPaymentCharger cardPaymentCharger;
+
+    @MockBean
+    private PhoneNumberValidator phoneValidator;
+
+    @Test
+    void fullValidFlow_PersistsData() {
+        // Setup customer
+        UUID customerId = UUID.randomUUID();
+        when(phoneValidator.test(any())).thenReturn(true);
+        customerController.registerNewCustomer(new CustomerRegistrationRequest(
+            new Customer(customerId, "John", "+123456789")
+        ));
+
+        // Mock payment charge
+        when(cardPaymentCharger.chargeCard(any(), any(), any(), any()))
+            .thenReturn(new CardPaymentCharge(true));
+
+        // Execute payment
+        PaymentRequest paymentReq = new PaymentRequest(
+            new Payment(null, customerId, BigDecimal.TEN, Currency.GBP, "card1", "test")
+        );
+        paymentController.makePayment(paymentReq);
+
+        // Verify persistence
+        assertEquals(1, customerRepository.count());
+        assertEquals(1, paymentRepository.count());
+    }
+
+    @Test
+    void invalidCustomer_ThrowsException() {
+        PaymentRequest invalidReq = new PaymentRequest(
+            new Payment(null, UUID.randomUUID(), BigDecimal.ONE, Currency.PLN, "card2", "invalid")
+        );
+        
+        assertThrows(IllegalStateException.class, 
+            () -> paymentController.makePayment(invalidReq));
+        assertEquals(0, paymentRepository.count());
+    }
+
+    @Test
+    void duplicatePhoneNumber_ThrowsError() {
+        when(phoneValidator.test(any())).thenReturn(true);
+        Customer existing = new Customer(UUID.randomUUID(), "Alice", "+11111111");
+        customerController.registerNewCustomer(new CustomerRegistrationRequest(existing));
+
+        assertThrows(IllegalStateException.class, 
+            () -> customerController.registerNewCustomer(
+                new CustomerRegistrationRequest(new Customer(UUID.randomUUID(), "Bob", "+11111111"))
+        );
+    }
+}

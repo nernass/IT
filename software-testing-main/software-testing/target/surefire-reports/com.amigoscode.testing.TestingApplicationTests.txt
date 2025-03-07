@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.amigoscode.testing.TestingApplicationTests
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.157 s - in com.amigoscode.testing.TestingApplicationTests

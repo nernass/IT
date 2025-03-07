@@ -1,0 +1,8 @@
+-------------------------------------------------------------------------------
+Test set: com.amigoscode.testing.payment.stripe.StripeServiceTest
+-------------------------------------------------------------------------------
+Tests run: 2, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.017 s <<< FAILURE! - in com.amigoscode.testing.payment.stripe.StripeServiceTest
+itShouldThrowException  Time elapsed: 0.003 s  <<< ERROR!
+java.lang.InstantiationError: com.stripe.exception.StripeException
+	at com.amigoscode.testing.payment.stripe.StripeServiceTest.itShouldThrowException(StripeServiceTest.java:82)
+
