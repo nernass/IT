@@ -1,0 +1,122 @@
+```java
+package com.example.examplerest.endpoint;
+
+import com.example.examplerest.dto.CreateAuthorDto;
+import com.example.examplerest.model.Author;
+import com.example.examplerest.model.Gender;
+import com.example.examplerest.repository.AuthorRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import javax.transaction.Transactional;
+import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class AuthorEndpointIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private AuthorRepository authorRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @AfterEach
+    void tearDown() {
+        authorRepository.deleteAll();
+    }
+
+    @Test
+    void getAllAuthors_withExistingAuthors_returnsAll() throws Exception {
+        // Arrange
+        Author author = Author.builder()
+            .name("John")
+            .surname("Doe")
+            .email("john@example.com")
+            .gender(Gender.MALE)
+            .build();
+        authorRepository.save(author);
+
+        // Act & Assert
+        mockMvc.perform(get("/authors"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].name").value("John"))
+            .andExpect(jsonPath("$[0].email").value("john@example.com"));
+    }
+
+    @Test
+    void createAuthor_validData_persistsToDatabase() throws Exception {
+        // Arrange
+        CreateAuthorDto dto = new CreateAuthorDto();
+        dto.setName("Jane");
+        dto.setSurname("Smith");
+        dto.setEmail("jane@example.com");
+        dto.setGender(Gender.FEMALE);
+
+        // Act
+        mockMvc.perform(post("/authors")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("Jane"));
+
+        // Assert
+        List<Author> authors = authorRepository.findAll();
+        assertThat(authors).hasSize(1);
+        assertThat(authors.get(0).extracting(Author::getEmail)
+            .isEqualTo("jane@example.com");
+    }
+
+    @Test
+    void createAuthor_invalidEmail_returnsBadRequest() throws Exception {
+        // Arrange
+        CreateAuthorDto dto = new CreateAuthorDto();
+        dto.setName("Invalid");
+        dto.setEmail("invalid-email");  // Invalid email format
+        dto.setGender(Gender.MALE);
+
+        // Act & Assert
+        mockMvc.perform(post("/authors")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+            .andExpect(status().isBadRequest());
+
+        assertThat(authorRepository.count()).isZero();
+    }
+
+    @Test
+    void createAuthor_missingName_returnsValidationError() throws Exception {
+        // Arrange
+        CreateAuthorDto dto = new CreateAuthorDto();
+        dto.setEmail("test@example.com");
+        dto.setGender(Gender.FEMALE);
+
+        // Act & Assert
+        mockMvc.perform(post("/authors")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateBook_invalidId_returnsBadRequest() throws Exception {
+        // Act & Assert
+        mockMvc.perform(put("/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":0}"))
+            .andExpect(status().isBadRequest());
+    }
+}
+```

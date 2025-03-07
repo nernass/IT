@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    username: sa
+    password: password
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.H2Dialect
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+jwt:
+  secret: hgdskgiadpg%^#%6525554&@
+  expiration: 330000
+logging:
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${LOG_FILE}.%d{yyyy-MM-dd}.%i.gz # by date
+      max-file-size: 10MB # by size
+  file:
+    name: C:\Users\sky\IdeaProjects\Java2022\exampleRest\exampleRest\log/application.log
+#  pattern:
+#    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level - %msg%n"
+#    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    root: info
+    com.example: info
+cb:
+  url: https://cb.am/latest.json.php

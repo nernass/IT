@@ -1,0 +1,172 @@
+```java
+package com.example.examplerest.endpoint;
+
+import com.example.examplerest.model.Author;
+import com.example.examplerest.model.Book;
+import com.example.examplerest.model.BookLanguage;
+import com.example.examplerest.model.Gender;
+import com.example.examplerest.repository.AuthorRepository;
+import com.example.examplerest.repository.BookRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.client.RestTemplate;
+import javax.transaction.Transactional;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class BookEndpointIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private BookRepository bookRepository;
+
+    @Autowired
+    private AuthorRepository authorRepository;
+
+    @MockBean
+    private RestTemplate restTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    private Author savedAuthor;
+
+    @BeforeEach
+    void setUp() {
+        // Create and save an author for book associations
+        savedAuthor = authorRepository.save(Author.builder()
+            .name("J.K. Rowling")
+            .email("jk@example.com")
+            .gender(Gender.FEMALE)
+            .build());
+    }
+
+    @AfterEach
+    void tearDown() {
+        bookRepository.deleteAll();
+        authorRepository.deleteAll();
+    }
+
+    @Test
+    void getAllBooks_withValidCurrency_convertsPrices() throws Exception {
+        // Arrange
+        Book book = Book.builder()
+            .title("Harry Potter")
+            .price(340.0)
+            .language(BookLanguage.EN)
+            .author(savedAuthor)
+            .build();
+        bookRepository.save(book);
+
+        // Mock currency API response
+        Map<String, String> currencyResponse = new HashMap<>();
+        currencyResponse.put("USD", "340.0");
+        Mockito.when(restTemplate.getForEntity(Mockito.anyString(), Mockito.eq(Map.class)))
+            .thenReturn(ResponseEntity.ok(currencyResponse));
+
+        // Act & Assert
+        mockMvc.perform(get("/books"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].price").value(1.0));
+    }
+
+    @Test
+    void createBook_validData_persistsToDatabase() throws Exception {
+        // Arrange
+        Book book = Book.builder()
+            .title("Effective Java")
+            .price(45.0)
+            .language(BookLanguage.EN)
+            .author(savedAuthor)
+            .build();
+
+        // Act
+        mockMvc.perform(post("/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(book)))
+            .andExpect(status().isNoContent());
+
+        // Assert
+        assertThat(bookRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    void createBook_missingTitle_returnsBadRequest() throws Exception {
+        // Arrange
+        Book invalidBook = Book.builder()
+            .price(29.99)
+            .language(BookLanguage.EN)
+            .author(savedAuthor)
+            .build();
+
+        // Act & Assert
+        mockMvc.perform(post("/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(invalidBook)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getBookById_nonExistent_returnsNotFound() throws Exception {
+        mockMvc.perform(get("/books/999"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getAllBooks_emptyDatabase_returnsEmptyList() throws Exception {
+        mockMvc.perform(get("/books"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isArray())
+            .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void createBook_boundaryPriceValues_processesCorrectly() throws Exception {
+        // Test minimum price
+        Book minPriceBook = Book.builder()
+            .title("Zero Price Book")
+            .price(0.0)
+            .language(BookLanguage.EN)
+            .author(savedAuthor)
+            .build();
+
+        mockMvc.perform(post("/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(minPriceBook)))
+            .andExpect(status().isNoContent());
+
+        // Test maximum price
+        Book maxPriceBook = Book.builder()
+            .title("Max Price Book")
+            .price(1000.0)
+            .language(BookLanguage.EN)
+            .author(savedAuthor)
+            .build();
+
+        mockMvc.perform(post("/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(maxPriceBook)))
+            .andExpect(status().isNoContent());
+
+        assertThat(bookRepository.findAll()).hasSize(2);
+    }
+}
+```

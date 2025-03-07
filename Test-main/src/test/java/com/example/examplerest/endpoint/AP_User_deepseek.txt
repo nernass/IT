@@ -1,0 +1,159 @@
+```java
+package com.example.examplerest.endpoint;
+
+import com.example.examplerest.dto.CreateUserDto;
+import com.example.examplerest.dto.UserAuthDto;
+import com.example.examplerest.model.Role;
+import com.example.examplerest.model.User;
+import com.example.examplerest.repository.UserRepository;
+import com.example.examplerest.service.CurrencyService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import javax.transaction.Transactional;
+import java.util.HashMap;
+import java.util.Optional;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class UserEndpointIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @MockBean
+    private CurrencyService currencyService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @AfterEach
+    void tearDown() {
+        userRepository.deleteAll();
+    }
+
+    @Test
+    void register_validUser_returnsCreatedUser() throws Exception {
+        // Mock currency service response
+        Mockito.when(currencyService.getCurrencies())
+            .thenReturn(new HashMap<>(Map.of("USD", "500")));
+
+        CreateUserDto dto = new CreateUserDto();
+        dto.setName("John");
+        dto.setEmail("john@example.com");
+        dto.setPassword("Password123!");
+        dto.setRole(Role.USER);
+
+        mockMvc.perform(post("/user")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value("john@example.com"));
+
+        Optional<User> savedUser = userRepository.findByEmail("john@example.com");
+        assertThat(savedUser).isPresent();
+        assertThat(passwordEncoder.matches("Password123!", savedUser.get().getPassword())).isTrue();
+    }
+
+    @Test
+    void register_duplicateEmail_returnsConflict() throws Exception {
+        // Existing user
+        userRepository.save(User.builder()
+            .email("existing@example.com")
+            .password("dummy")
+            .role(Role.USER)
+            .build());
+
+        CreateUserDto dto = new CreateUserDto();
+        dto.setEmail("existing@example.com");
+        dto.setPassword("Password123!");
+
+        mockMvc.perform(post("/user")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void auth_validCredentials_returnsToken() throws Exception {
+        // Setup test user
+        User user = userRepository.save(User.builder()
+            .email("auth@test.com")
+            .password(passwordEncoder.encode("validPass"))
+            .role(Role.USER)
+            .build());
+
+        UserAuthDto authDto = new UserAuthDto();
+        authDto.setEmail("auth@test.com");
+        authDto.setPassword("validPass");
+
+        mockMvc.perform(post("/user/auth")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(authDto)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.token").exists());
+    }
+
+    @Test
+    void auth_invalidPassword_returnsUnauthorized() throws Exception {
+        userRepository.save(User.builder()
+            .email("user@test.com")
+            .password(passwordEncoder.encode("correctPass"))
+            .build());
+
+        UserAuthDto authDto = new UserAuthDto();
+        authDto.setEmail("user@test.com");
+        authDto.setPassword("wrongPass");
+
+        mockMvc.perform(post("/user/auth")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(authDto)))
+            .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void register_missingPassword_returnsBadRequest() throws Exception {
+        CreateUserDto dto = new CreateUserDto();
+        dto.setEmail("test@example.com");
+        // Missing password
+
+        mockMvc.perform(post("/user")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void register_edgeCaseMinimalAge() throws Exception {
+        CreateUserDto dto = new CreateUserDto();
+        dto.setEmail("edge@test.com");
+        dto.setPassword("pass");
+        dto.setAge(0); // Assuming age validation exists
+
+        mockMvc.perform(post("/user")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+            .andExpect(status().isOk());
+
+        assertThat(userRepository.findByEmail("edge@test.com")).isPresent();
+    }
+}
+```
