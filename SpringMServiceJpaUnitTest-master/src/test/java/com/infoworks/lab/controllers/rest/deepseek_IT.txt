@@ -1,0 +1,97 @@
+```java
+package com.infoworks.lab.controllers.rest;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.infoworks.lab.domain.entities.Passenger;
+import com.infoworks.lab.services.impl.PassengerServiceImpl;
+import com.infoworks.lab.webapp.config.BeanConfig;
+import com.infoworks.lab.webapp.config.TestJPAH2Config;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ContextConfiguration(classes = {TestJPAH2Config.class, BeanConfig.class})
+@Transactional
+@Sql(scripts = {"classpath:schema.sql"})
+class PassengerControllerIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private PassengerServiceImpl passengerService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    private Passenger testPassenger;
+
+    @BeforeEach
+    void setup() {
+        testPassenger = new Passenger("Test User", Passenger.Gender.MALE, 25);
+        entityManager.persist(testPassenger);
+        entityManager.flush();
+    }
+
+    @Test
+    void getRowCount_ReturnsValidCount() throws Exception {
+        mockMvc.perform(get("/passenger/rowCount"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("{\"count\":1}"));
+    }
+
+    @Test
+    void insertPassenger_ValidPayload_ReturnsCreatedPassenger() throws Exception {
+        Passenger newPassenger = new Passenger("New User", Passenger.Gender.FEMALE, 30);
+        
+        mockMvc.perform(post("/passenger")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(newPassenger)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("New User"));
+    }
+
+    @Test
+    void queryPassengers_ReturnsPaginatedResults() throws Exception {
+        mockMvc.perform(get("/passenger?limit=10&page=0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Test User"));
+    }
+
+    @Test
+    void updatePassenger_ValidPayload_ReturnsUpdatedPassenger() throws Exception {
+        testPassenger.setName("Updated Name");
+        
+        mockMvc.perform(put("/passenger")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(testPassenger)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Updated Name"));
+    }
+
+    @Test
+    void deletePassenger_ExistingId_ReturnsTrue() throws Exception {
+        mockMvc.perform(delete("/passenger?userid=" + testPassenger.getId()))
+                .andExpect(status().isOk())
+                .andExpect(content().string("true"));
+    }
+}
+```

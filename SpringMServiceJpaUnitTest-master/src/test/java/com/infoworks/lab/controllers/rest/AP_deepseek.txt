@@ -1,0 +1,97 @@
+```java
+package com.infoworks.lab.controllers.rest;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.infoworks.lab.domain.entities.Passenger;
+import com.infoworks.lab.services.iServices.PassengerService;
+import com.infoworks.lab.webapp.config.BeanConfig;
+import com.infoworks.lab.webapp.config.TestJPAH2Config;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
+import static org.hamcrest.Matchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ContextConfiguration(classes = {TestJPAH2Config.class, BeanConfig.class})
+@Transactional
+class PassengerControllerIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private PassengerService passengerService;
+
+    @Autowired
+    private ObjectMapper mapper;
+
+    private Passenger validPassenger;
+
+    @BeforeEach
+    void setup() {
+        validPassenger = new Passenger("John Doe", Passenger.Gender.MALE, 25);
+    }
+
+    @Test
+    void insertPassenger_validData_returnsCreatedPassenger() throws Exception {
+        mockMvc.perform(post("/passenger")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(validPassenger)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name", is("John Doe")))
+                .andExpect(jsonPath("$.age", is(25)));
+
+        List<Passenger> passengers = passengerService.findAll(0, 10);
+        assertThat(passengers).hasSize(1);
+    }
+
+    @Test
+    void getRowCount_afterInsert_returnsCorrectCount() throws Exception {
+        passengerService.add(validPassenger);
+        
+        mockMvc.perform(get("/passenger/rowCount"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("\"count\":1")));
+    }
+
+    @Test
+    void deletePassenger_invalidId_returnsFalse() throws Exception {
+        mockMvc.perform(delete("/passenger?userid=999"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("false"));
+    }
+
+    @Test
+    void insertPassenger_invalidAge_throwsValidationError() throws Exception {
+        Passenger invalid = new Passenger("Invalid", Passenger.Gender.FEMALE, 17);
+        
+        mockMvc.perform(post("/passenger")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(invalid)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updatePassenger_nonExisting_createsNewEntry() throws Exception {
+        Passenger newPassenger = new Passenger("Jane Doe", Passenger.Gender.FEMALE, 30);
+        newPassenger.setId(999); // Non-existing ID
+        
+        mockMvc.perform(put("/passenger")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(newPassenger)))
+                .andExpect(status().isOk());
+        
+        assertThat(passengerService.findByUserID(999)).isNotNull();
+    }
+}
+```
