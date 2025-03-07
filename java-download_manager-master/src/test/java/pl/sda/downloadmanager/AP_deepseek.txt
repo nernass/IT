@@ -1,0 +1,105 @@
+```java
+package pl.sda.downloadmanager;
+
+import org.apache.http.client.HttpClient;
+import org.eclipse.jetty.server.Server;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import pl.sda.downloadmanager.gdrive.DriveService;
+
+import java.io.IOException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.TimeUnit;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+class DownloadManagerIntegrationTest {
+
+    private Server jettyServer;
+    private Path tempDir;
+    private DriveService mockDriveService;
+    private DownloadManager downloadManager;
+    private int testPort = 8080;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        // Start Jetty server with test response
+        jettyServer = JettyEmbeddedServer.prepareServerWithResponse("test-content", testPort);
+        jettyServer.start();
+
+        // Create temp directory for downloads
+        tempDir = Files.createTempDirectory("download-test");
+        
+        // Mock DriveService
+        mockDriveService = Mockito.mock(DriveService.class);
+        
+        // Initialize DownloadManager with real HTTP client and mocked DriveService
+        downloadManager = new DownloadManager(tempDir, mockDriveService);
+    }
+
+    @Test
+    void download_validUrl_downloadsFileAndTriggersUpload() throws Exception {
+        // Arrange
+        URL testUrl = new URL("http://localhost:" + testPort + "/file.txt");
+
+        // Act
+        downloadManager.download(testUrl);
+
+        // Assert
+        assertTrue(Files.exists(tempDir.resolve("file.txt")));
+        verify(mockDriveService).upload(any(), eq("file.txt"));
+    }
+
+    @Test
+    void downloadAll_multipleUrls_processesConcurrently() throws Exception {
+        // Arrange
+        Path urlList = Files.write(tempDir.resolve("urls.txt"), 
+            List.of("http://localhost:" + testPort + "/file1.txt",
+                    "http://localhost:" + testPort + "/file2.txt"));
+
+        // Act
+        downloadManager.downloadAll(urlList);
+        
+        // Assert
+        assertTrue(Files.exists(tempDir.resolve("file1.txt")));
+        assertTrue(Files.exists(tempDir.resolve("file2.txt")));
+        verify(mockDriveService, times(2)).upload(any(), any());
+    }
+
+    @Test
+    void download_invalidUrl_throwsRuntimeException() {
+        // Arrange
+        URL invalidUrl = new URL("http://invalidhost:9999/nonexistent");
+
+        // Act & Assert
+        assertThrows(RuntimeException.class, () -> downloadManager.download(invalidUrl));
+    }
+
+    @Test
+    void copyToDrive_uploadFailure_propagatesException() throws Exception {
+        // Arrange
+        URL testUrl = new URL("http://localhost:" + testPort + "/file.txt");
+        doThrow(new IOException("Drive unreachable")).when(mockDriveService).upload(any(), any());
+
+        // Act & Assert
+        assertThrows(IOException.class, () -> downloadManager.copyToDrive(testUrl));
+    }
+
+    @AfterEach
+    void tearDown() throws Exception {
+        jettyServer.stop();
+        Files.walk(tempDir)
+            .sorted((a, b) -> b.compareTo(a))
+            .forEach(path -> {
+                try { Files.delete(path); } 
+                catch (IOException ignored) {}
+            });
+    }
+}
+```

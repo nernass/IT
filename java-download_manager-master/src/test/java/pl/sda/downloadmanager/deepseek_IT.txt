@@ -1,0 +1,107 @@
+```java
+package pl.sda.downloadmanager;
+
+import org.eclipse.jetty.server.Server;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mockito;
+import pl.sda.downloadmanager.gdrive.Drive;
+import pl.sda.downloadmanager.gdrive.DriveService;
+
+import java.io.IOException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
+
+class DownloadManagerIntegrationTest {
+
+    private Server jettyServer;
+    private final int TEST_PORT = 9090;
+    private final String TEST_CONTENT = "test-file-content";
+    private DriveService mockDriveService;
+    private Path tempDownloadDir;
+
+    @BeforeEach
+    void setup(@TempDir Path tempDir) throws Exception {
+        tempDownloadDir = tempDir;
+        jettyServer = JettyEmbeddedServer.prepareServerWithResponse(TEST_CONTENT, TEST_PORT);
+        jettyServer.start();
+        
+        Drive mockDrive = Mockito.mock(Drive.class);
+        mockDriveService = Mockito.spy(new DriveService(mockDrive));
+    }
+
+    @AfterEach
+    void teardown() throws Exception {
+        if (jettyServer != null) {
+            jettyServer.stop();
+        }
+    }
+
+    @Test
+    void shouldDownloadFileAndUploadToDrive() throws Exception {
+        // Given
+        DownloadManager downloadManager = new DownloadManager(tempDownloadDir, mockDriveService);
+        URL testUrl = new URL("http://localhost:" + TEST_PORT + "/testfile.txt");
+        
+        // Add verification listener
+        AtomicBoolean downloadCompleted = new AtomicBoolean(false);
+        downloadManager.registerListener(new DownloadEventListener() {
+            @Override
+            public void onStart(URL url) {}
+            
+            @Override
+            public void onFinish(URL url) {
+                downloadCompleted.set(true);
+            }
+        });
+
+        // When
+        downloadManager.download(testUrl);
+        downloadManager.copyToDrive(testUrl);
+
+        // Then
+        Path downloadedFile = tempDownloadDir.resolve("testfile.txt");
+        assertTrue(Files.exists(downloadedFile));
+        assertTrue(Files.readString(downloadedFile).contains(TEST_CONTENT));
+        verify(mockDriveService).upload(any(), anyString());
+        assertTrue(downloadCompleted.get());
+    }
+
+    @Test
+    void shouldHandleMultipleDownloads() throws Exception {
+        // Given
+        DownloadManager downloadManager = new DownloadManager(tempDownloadDir, mockDriveService);
+        Path urlListFile = tempDownloadDir.resolve("urls.txt");
+        Files.writeString(urlListFile, 
+            "http://localhost:" + TEST_PORT + "/file1.txt\n" +
+            "http://localhost:" + TEST_PORT + "/file2.txt"
+        );
+
+        // When
+        downloadManager.downloadAll(urlListFile);
+
+        // Then
+        assertTrue(Files.exists(tempDownloadDir.resolve("file1.txt")));
+        assertTrue(Files.exists(tempDownloadDir.resolve("file2.txt")));
+    }
+
+    @Test
+    void shouldHandleInvalidUrlGracefully() {
+        DownloadManager downloadManager = new DownloadManager(tempDownloadDir, mockDriveService);
+        URL invalidUrl = Mockito.mock(URL.class);
+        Mockito.when(invalidUrl.getFile()).thenThrow(new RuntimeException("Invalid URL"));
+        
+        // Verify exception is handled
+        downloadManager.download(invalidUrl);
+    }
+}
+```
