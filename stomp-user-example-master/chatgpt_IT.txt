@@ -1,0 +1,107 @@
+import fr.anw.stompUserExample.server.WsTestUtils;
+import fr.anw.stompUserExample.server.ClientFrameHandler;
+import fr.anw.stompUserExample.server.ClientSessionHandler;
+import fr.anw.stompUserExample.server.config.WsConfig;
+import fr.anw.stompUserExample.server.controllers.RegisterController;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.web.server.LocalServerPort;
+import org.springframework.messaging.simp.stomp.StompCommand;
+import org.springframework.messaging.simp.stomp.StompHeaders;
+import org.springframework.messaging.simp.stomp.StompSession;
+import org.springframework.messaging.simp.stomp.StompSessionHandler;
+import org.springframework.web.socket.messaging.WebSocketStompClient;
+
+import java.lang.reflect.Type;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+public class WsIntegrationTest {
+
+    @LocalServerPort
+    private int port;
+
+    private WebSocketStompClient stompClient;
+    private String url;
+
+    private CountDownLatch userReplyLatch;
+    private CountDownLatch broadcastLatch;
+
+    private String userReplyMessage;
+    private String broadcastMessage;
+
+    @BeforeEach
+    public void setUp() {
+        WsTestUtils utils = new WsTestUtils();
+        stompClient = utils.createWebSocketClient();
+        url = "ws://localhost:" + port + WsConfig.ENDPOINT_CONNECT;
+        userReplyLatch = new CountDownLatch(1);
+        broadcastLatch = new CountDownLatch(1);
+    }
+
+    @Test
+    public void testRegisterFlow() throws Exception {
+        StompSessionHandler sessionHandler = new ClientSessionHandler() {
+            @Override
+            public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
+                // subscribe to user reply destination
+                session.subscribe("/user" + WsConfig.SUBSCRIBE_USER_REPLY, new ClientFrameHandler(payload -> {
+                    userReplyMessage = payload;
+                    userReplyLatch.countDown();
+                }));
+                // subscribe to broadcast destination
+                session.subscribe(WsConfig.SUBSCRIBE_QUEUE, new ClientFrameHandler(payload -> {
+                    broadcastMessage = payload;
+                    broadcastLatch.countDown();
+                }));
+                // send registration message
+                session.send(RegisterController.ENDPOINT_REGISTER, "TestRegistration");
+            }
+        };
+
+        StompSession session = stompClient.connect(url, sessionHandler).get(5, TimeUnit.SECONDS);
+        boolean userReplyReceived = userReplyLatch.await(5, TimeUnit.SECONDS);
+        boolean broadcastReceived = broadcastLatch.await(5, TimeUnit.SECONDS);
+        assertTrue(userReplyReceived);
+        assertTrue(broadcastReceived);
+        assertEquals("Thanks for your registration!", userReplyMessage);
+        assertEquals("Someone just registered saying: TestRegistration", broadcastMessage);
+        session.disconnect();
+    }
+
+    @Test
+    public void testWsTestUtils() {
+        WsTestUtils utils = new WsTestUtils();
+        assertNotNull(utils.createWebSocketClient());
+    }
+
+    @Test
+    public void testClientFrameHandlerErrorHandling() {
+        AtomicBoolean exceptionCaught = new AtomicBoolean(false);
+        ClientFrameHandler frameHandler = new ClientFrameHandler(payload -> {
+            throw new RuntimeException("Test exception");
+        });
+        try {
+            frameHandler.handleFrame(new StompHeaders(), "TestPayload");
+        } catch (Exception e) {
+            exceptionCaught.set(true);
+        }
+        assertTrue(exceptionCaught.get());
+    }
+
+    @Test
+    public void testClientSessionHandlerErrorHandling() {
+        ClientSessionHandler sessionHandler = new ClientSessionHandler();
+        assertDoesNotThrow(() -> {
+            sessionHandler.handleException(null, StompCommand.SEND, new StompHeaders(), new byte[0], new Exception("Test exception"));
+        });
+    }
+}

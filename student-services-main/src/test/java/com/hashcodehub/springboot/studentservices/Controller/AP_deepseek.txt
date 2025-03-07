@@ -1,0 +1,85 @@
+```java
+package com.hashcodehub.springboot.studentservices.Controller;
+
+import com.hashcodehub.springboot.studentservices.Model.Course;
+import com.hashcodehub.springboot.studentservices.StudentServicesApplication;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest(
+    classes = StudentServicesApplication.class,
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+)
+class StudentControllerIntegrationTest {
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    @Test
+    void retrieveCoursesForStudent_validId_returnsCourses() {
+        ResponseEntity<List> response = restTemplate.getForEntity(
+            "/students/Student1/courses", List.class
+        );
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).hasSize(4);
+    }
+
+    @Test
+    void retrieveCourseDetails_validIds_returnsCourse() {
+        ResponseEntity<Course> response = restTemplate.getForEntity(
+            "/students/Student1/courses/Course1", Course.class
+        );
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().getName()).isEqualTo("spring");
+    }
+
+    @Test
+    void registerStudentForCourse_validRequest_returnsCreated() {
+        Course newCourse = new Course(null, "Kubernetes", "Cloud Orchestration", List.of("Step1"));
+        ResponseEntity<Void> response = restTemplate.postForEntity(
+            "/students/Student1/courses", newCourse, Void.class
+        );
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(response.getHeaders().getLocation()).isNotNull();
+    }
+
+    @Test
+    void retrieveCoursesForStudent_invalidId_returnsEmpty() {
+        ResponseEntity<List> response = restTemplate.getForEntity(
+            "/students/InvalidStudent/courses", List.class
+        );
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNull();
+    }
+
+    @Test
+    void registerStudentForCourse_invalidStudent_returnsNoContent() {
+        Course newCourse = new Course(null, "Docker", "Containerization", List.of("Step1"));
+        ResponseEntity<Void> response = restTemplate.postForEntity(
+            "/students/InvalidStudent/courses", newCourse, Void.class
+        );
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    @Test
+    void retrieveCourseDetails_invalidCourseId_returnsNotFound() {
+        ResponseEntity<Course> response = restTemplate.getForEntity(
+            "/students/Student1/courses/InvalidCourse", Course.class
+        );
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNull();
+    }
+}
+```

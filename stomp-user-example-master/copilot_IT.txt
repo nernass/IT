@@ -1,0 +1,61 @@
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import org.springframework.messaging.simp.stomp.StompSession;
+import org.springframework.messaging.converter.StringMessageConverter;
+
+import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.messaging.WebSocketStompClient;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+@SpringBootTest
+public class WsIntegrationTest {
+
+    @Autowired
+    private WsConfig wsConfig;
+
+    @Autowired
+    private RegisterController registerController;
+
+    private WebSocketStompClient stompClient;
+    private String WEBSOCKET_URI = "ws://localhost:8080" + WsConfig.ENDPOINT_CONNECT;
+
+    @BeforeEach
+    public void setup() {
+        // Placeholder for required setup
+        stompClient = new WsTestUtils().createWebSocketClient();
+    }
+
+    @Test
+    public void testRegisterEndpoint() throws Exception {
+        // Placeholder for mock dependencies and additional setup
+
+        // Future to hold the response message
+        CompletableFuture<String> completableFuture = new CompletableFuture<>();
+
+        // Connect to the WebSocket endpoint
+        StompSession stompSession = stompClient.connect(WEBSOCKET_URI, new ClientSessionHandler()).get(5, TimeUnit.SECONDS);
+
+        // Subscribe to the user's reply destination
+        stompSession.subscribe(WsConfig.SUBSCRIBE_USER_PREFIX + WsConfig.SUBSCRIBE_USER_REPLY, new ClientFrameHandler(completableFuture::complete));
+
+        // Send a registration message
+        String payload = "Test registration message";
+        stompSession.send(RegisterController.ENDPOINT_REGISTER, payload);
+
+        // Await and verify the response
+        String response = completableFuture.get(5, TimeUnit.SECONDS);
+        // Placeholder for assertions
+        // e.g., assertEquals("Thanks for your registration!", response);
+
+        // Clean up the session
+        stompSession.disconnect();
+    }
+
+    // Additional tests for validating data flow and error handling
+}

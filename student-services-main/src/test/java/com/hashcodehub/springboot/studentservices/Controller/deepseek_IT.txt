@@ -1,0 +1,80 @@
+```java
+package com.hashcodehub.springboot.studentservices.Controller;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import com.hashcodehub.springboot.studentservices.Model.Course;
+import com.hashcodehub.springboot.studentservices.Model.Student;
+import com.hashcodehub.springboot.studentservices.Service.StudentService;
+import com.hashcodehub.springboot.studentservices.StudentServicesApplication;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import java.util.Arrays;
+import java.util.List;
+
+@SpringBootTest(classes = StudentServicesApplication.class)
+@AutoConfigureMockMvc
+class StudentControllerIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private StudentService studentService;
+
+    private Course testCourse;
+    private final String studentId = "Student1";
+    private final String courseId = "Course1";
+
+    @BeforeEach
+    void setup() {
+        testCourse = new Course(courseId, "Spring", "10 Steps", Arrays.asList("Step1", "Step2"));
+        Student student = new Student(studentId, "Test Student", "Description", Arrays.asList(testCourse));
+        when(studentService.retreiveCourses(studentId)).thenReturn(Arrays.asList(testCourse));
+        when(studentService.retreiveCourse(studentId, courseId)).thenReturn(testCourse);
+        when(studentService.addCourse(studentId, testCourse)).thenReturn(testCourse);
+    }
+
+    @Test
+    void retreiveCoursesForStudent_ValidId_ReturnsCourses() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/students/{studentId}/courses", studentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(courseId))
+                .andExpect(jsonPath("$[0].name").value("Spring"));
+    }
+
+    @Test
+    void retreiveCourseDetails_ValidIds_ReturnsCourse() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/students/{studentId}/courses/{courseId}", studentId, courseId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(courseId))
+                .andExpect(jsonPath("$.description").value("10 Steps"));
+    }
+
+    @Test
+    void registerStudentForCourse_ValidRequest_ReturnsCreated() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.post("/students/{studentId}/courses", studentId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"id\": \"Course2\", \"name\": \"Spring Boot\", \"description\": \"Advanced Steps\" }"))
+                .andExpect(status().isCreated())
+                .andExpect(header().exists("Location"));
+    }
+
+    @Test
+    void registerStudentForCourse_InvalidStudent_ReturnsNoContent() throws Exception {
+        when(studentService.addCourse("invalidStudent", any())).thenReturn(null);
+        mockMvc.perform(MockMvcRequestBuilders.post("/students/{studentId}/courses", "invalidStudent")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"name\": \"Invalid Course\" }"))
+                .andExpect(status().isNoContent());
+    }
+}
+```

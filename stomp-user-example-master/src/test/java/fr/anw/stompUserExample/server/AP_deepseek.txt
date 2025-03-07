@@ -1,0 +1,84 @@
+```java
+package fr.anw.stompUserExample.server.controllers;
+
+import fr.anw.stompUserExample.server.ClientFrameHandler;
+import fr.anw.stompUserExample.server.ClientSessionHandler;
+import fr.anw.stompUserExample.server.WsTestUtils;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.messaging.simp.stomp.StompSession;
+import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class RegisterControllerIntegrationTest {
+
+    @LocalServerPort
+    private int port;
+
+    private WebSocketStompClient stompClient;
+    private BlockingQueue<String> responseQueue;
+
+    @BeforeEach
+    void setup() {
+        stompClient = new WsTestUtils().createWebSocketClient();
+        responseQueue = new LinkedBlockingQueue<>();
+    }
+
+    @Test
+    void register_validPayload_receivesConfirmation() throws Exception {
+        StompSession session = stompClient.connect(
+            "ws://localhost:" + port + WsConfig.ENDPOINT_CONNECT,
+            new ClientSessionHandler()
+        ).get(1, TimeUnit.SECONDS);
+
+        session.subscribe(WsConfig.SUBSCRIBE_USER_REPLY, new ClientFrameHandler(responseQueue::offer));
+        session.subscribe(WsConfig.SUBSCRIBE_QUEUE, new ClientFrameHandler(responseQueue::offer));
+
+        session.send(RegisterController.ENDPOINT_REGISTER, "test-payload");
+
+        String userReply = responseQueue.poll(2, TimeUnit.SECONDS);
+        String queueMessage = responseQueue.poll(2, TimeUnit.SECONDS);
+
+        assertThat(userReply).isEqualTo("Thanks for your registration!");
+        assertThat(queueMessage).isEqualTo("Someone just registered saying: test-payload");
+    }
+
+    @Test
+    void register_emptyPayload_handlesGracefully() throws Exception {
+        StompSession session = stompClient.connect(
+            "ws://localhost:" + port + WsConfig.ENDPOINT_CONNECT,
+            new StompSessionHandlerAdapter() {}
+        ).get(1, TimeUnit.SECONDS);
+
+        session.subscribe(WsConfig.SUBSCRIBE_USER_REPLY, new ClientFrameHandler(responseQueue::offer));
+        session.send(RegisterController.ENDPOINT_REGISTER, "");
+
+        String userReply = responseQueue.poll(2, TimeUnit.SECONDS);
+        assertThat(userReply).isEqualTo("Thanks for your registration!");
+    }
+
+    @Test
+    void register_invalidEndpoint_throwsError() throws Exception {
+        StompSession session = stompClient.connect(
+            "ws://localhost:" + port + WsConfig.ENDPOINT_CONNECT,
+            new StompSessionHandlerAdapter() {}
+        ).get(1, TimeUnit.SECONDS);
+
+        BlockingQueue<Throwable> errorQueue = new LinkedBlockingQueue<>();
+        session.subscribe("/invalid-destination", new ClientFrameHandler(s -> {}));
+        session.setAutoReceipt(true);
+        session.send("/invalid-endpoint", "test", headers -> {
+            headers.setReceipt("error-receipt");
+        });
+
+        Throwable error = errorQueue.poll(2, TimeUnit.SECONDS);
+        assertThat(error).isNotNull();
+    }
+}
+```
