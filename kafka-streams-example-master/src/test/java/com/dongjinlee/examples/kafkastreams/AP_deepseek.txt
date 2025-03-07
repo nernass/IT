@@ -1,0 +1,111 @@
+```java
+package com.dongjinlee.examples.kafkastreams;
+
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.LongDeserializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.test.TestUtils;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.apache.kafka.test.IntegrationTest;
+import org.junit.jupiter.api.Timeout;
+import org.junit.experimental.categories.Category;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+import static org.assertj.core.api.Assertions.assertThat;
+
+@Category(IntegrationTest.class)
+@Timeout(120)
+class WordCountDemoIntegrationTest {
+
+    private static final String INPUT_TOPIC = "streams-plaintext-input";
+    private static final String OUTPUT_TOPIC = "streams-wordcount-output";
+    private static final String BOOTSTRAP_SERVERS = "localhost:9092";
+    
+    private EmbeddedKafkaCluster embeddedKafka;
+    private KafkaProducer<String, String> producer;
+    private KafkaConsumer<String, Long> consumer;
+    private KafkaStreams streams;
+
+    @BeforeEach
+    void setup() throws Exception {
+        // Start embedded Kafka cluster
+        embeddedKafka = new EmbeddedKafkaCluster(1);
+        embeddedKafka.start();
+        embeddedKafka.createTopic(INPUT_TOPIC);
+        embeddedKafka.createTopic(OUTPUT_TOPIC);
+
+        // Configure producer
+        Properties producerProps = new Properties();
+        producerProps.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, embeddedKafka.bootstrapServers());
+        producer = new KafkaProducer<>(producerProps, new StringSerializer(), new StringSerializer());
+
+        // Configure consumer
+        Properties consumerProps = new Properties();
+        consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, embeddedKafka.bootstrapServers());
+        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, "wordcount-integration-test");
+        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        consumer = new KafkaConsumer<>(consumerProps, new StringDeserializer(), new LongDeserializer());
+        consumer.subscribe(Collections.singleton(OUTPUT_TOPIC));
+
+        // Start Kafka Streams application
+        Properties streamsConfig = WordCountDemo.properties("integration-test", embeddedKafka.bootstrapServers());
+        streamsConfig.put(StreamsConfig.STATE_DIR_CONFIG, TestUtils.tempDirectory().getPath());
+        streams = new KafkaStreams(WordCountDemo.topology(INPUT_TOPIC, OUTPUT_TOPIC), streamsConfig);
+        streams.start();
+    }
+
+    @Test
+    void wordCount_validInput_producesCorrectCounts() {
+        // Send test data
+        producer.send(new ProducerRecord<>(INPUT_TOPIC, null, "hello world hello"));
+        producer.flush();
+
+        // Verify output
+        ConsumerRecords<String, Long> records = consumer.poll(Duration.ofSeconds(30));
+        assertThat(records)
+            .extracting(record -> record.key(), record -> record.value())
+            .containsExactlyInAnyOrder(
+                tuple("hello", 2L),
+                tuple("world", 1L)
+            );
+    }
+
+    @Test
+    void wordCount_emptyInput_handlesGracefully() {
+        producer.send(new ProducerRecord<>(INPUT_TOPIC, null, ""));
+        producer.flush();
+
+        ConsumerRecords<String, Long> records = consumer.poll(Duration.ofSeconds(5));
+        assertThat(records).isEmpty();
+    }
+
+    @Test
+    void wordCount_specialCharacters_processesCorrectly() {
+        producer.send(new ProducerRecord<>(INPUT_TOPIC, null, "kafka! streams@ test"));
+        producer.flush();
+
+        ConsumerRecords<String, Long> records = consumer.poll(Duration.ofSeconds(30));
+        assertThat(records)
+            .extracting(record -> record.key())
+            .containsExactlyInAnyOrder("kafka!", "streams@", "test");
+    }
+
+    @AfterEach
+    void tearDown() {
+        streams.close();
+        producer.close();
+        consumer.close();
+        embeddedKafka.stop();
+    }
+}
+```

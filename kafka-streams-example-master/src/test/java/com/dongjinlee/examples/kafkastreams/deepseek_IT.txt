@@ -1,0 +1,98 @@
+```java
+package com.dongjinlee.examples.kafkastreams;
+
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.time.Duration;
+import java.util.Collections;
+import java.util.Properties;
+
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.LongDeserializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+
+@Testcontainers
+class WordCountDemoIntegrationTest {
+
+    private static final String INPUT_TOPIC = "streams-plaintext-input";
+    private static final String OUTPUT_TOPIC = "streams-wordcount-output";
+    private static KafkaStreams streams;
+    private static AdminClient adminClient;
+
+    @Container
+    private static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.2.1"));
+
+    @BeforeAll
+    static void setup() throws Exception {
+        Properties adminProps = new Properties();
+        adminProps.put("bootstrap.servers", KAFKA.getBootstrapServers());
+        adminClient = AdminClient.create(adminProps);
+        adminClient.createTopics(
+            List.of(new NewTopic(INPUT_TOPIC, 1, (short) 1), 
+            new NewTopic(OUTPUT_TOPIC, 1, (short) 1)
+        ).all().get();
+
+        Properties streamsProps = WordCountDemo.properties("test-wordcount", KAFKA.getBootstrapServers());
+        streams = new KafkaStreams(WordCountDemo.topology(INPUT_TOPIC, OUTPUT_TOPIC), streamsProps);
+        streams.start();
+    }
+
+    @Test
+    void wordCountPipeline_ProcessesInputCorrectly() {
+        try (KafkaProducer<String, String> producer = new KafkaProducer<>(
+            Map.of(
+                "bootstrap.servers", KAFKA.getBootstrapServers(),
+                "key.serializer", StringSerializer.class.getName(),
+                "value.serializer", StringSerializer.class.getName()
+            )
+        )) {
+            producer.send(new ProducerRecord<>(INPUT_TOPIC, "hello world")).get();
+        }
+
+        try (KafkaConsumer<String, Long> consumer = new KafkaConsumer<>(
+            Map.of(
+                "bootstrap.servers", KAFKA.getBootstrapServers(),
+                "group.id", "test-consumer",
+                "auto.offset.reset", "earliest",
+                "key.deserializer", StringDeserializer.class.getName(),
+                "value.deserializer", LongDeserializer.class.getName()
+            )
+        )) {
+            consumer.subscribe(Collections.singleton(OUTPUT_TOPIC));
+
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                ConsumerRecords<String, Long> records = consumer.poll(Duration.ofMillis(100));
+                assertEquals(2, records.count());
+                records.forEach(record -> {
+                    if ("hello".equals(record.key())) {
+                        assertEquals(1L, record.value());
+                    } else if ("world".equals(record.key())) {
+                        assertEquals(1L, record.value());
+                    }
+                });
+            });
+        }
+    }
+
+    @AfterAll
+    static void tearDown() {
+        streams.close();
+        adminClient.close();
+    }
+}
+```
