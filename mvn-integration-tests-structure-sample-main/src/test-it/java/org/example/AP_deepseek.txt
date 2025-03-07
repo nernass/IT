@@ -1,0 +1,58 @@
+```java
+package org.example.controller;
+
+import org.example.App;
+import org.example.service.TimeService;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpStatus;
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest(
+    classes = App.class,
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+)
+class TimeControllerIntegrationTest {
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    @MockBean
+    private TimeService timeService;
+
+    @Test
+    void getCurrentServerTime_validRequest_returnsFormattedTime() {
+        Mockito.when(timeService.getCurrentTimeAsText())
+            .thenReturn("2023-08-04T12:34:56");
+        
+        var response = restTemplate.getForEntity("/time", String.class);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("2023-08-04T12:34:56");
+    }
+
+    @Test
+    void getCurrentServerTime_serviceThrowsError_returnsInternalError() {
+        Mockito.when(timeService.getCurrentTimeAsText())
+            .thenThrow(new RuntimeException("Time service unavailable"));
+        
+        var response = restTemplate.getForEntity("/time", String.class);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @Test
+    void getCurrentServerTime_emptyResponse_handlesGracefully() {
+        Mockito.when(timeService.getCurrentTimeAsText()).thenReturn("");
+        
+        var response = restTemplate.getForEntity("/time", String.class);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEmpty();
+    }
+}
+```
