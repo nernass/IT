@@ -1,0 +1,37 @@
+```java
+package com.demo.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.demo.MainApplication;
+import com.demo.domain.Person;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
+
+@SpringBootTest(classes = MainApplication.class)
+@Transactional
+class PersonServiceIntegrationTest {
+
+    @Autowired
+    private PersonService personService;
+
+    @Test
+    void addPerson_ValidData_PersistsInDatabase() {
+        personService.add("John", 123456);
+        
+        List<Person> persons = personService.loadAll();
+        assertThat(persons).hasSize(1);
+        assertThat(persons.get(0).getFirstName()).isEqualTo("John");
+        assertThat(persons.get(0).getNationalId()).isEqualTo(123456);
+    }
+
+    @Test
+    void loadAll_WithNoData_ReturnsEmptyList() {
+        List<Person> persons = personService.loadAll();
+        assertThat(persons).isEmpty();
+    }
+}
+```

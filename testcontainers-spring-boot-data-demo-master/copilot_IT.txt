@@ -1,0 +1,104 @@
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+
+import java.util.Arrays;
+import java.util.List;
+
+import com.demo.domain.Person;
+import com.demo.service.PersonService;
+
+@SpringBootTest
+@ExtendWith(MockitoExtension.class)
+public class PersonIntegrationTest {
+
+    @MockBean
+    private PersonService personService;
+
+    @Autowired
+    private MainApplication mainApplication;
+
+    @BeforeEach
+    public void setup() {
+        // Placeholder for required setup
+        // e.g., initializing mocks
+    }
+
+    @Test
+    public void testLoadAllPersons() {
+        // Prepare test data
+        Person person1 = new Person();
+        person1.setId(1);
+        person1.setFirstName("John");
+        person1.setNationalId(12345);
+
+        Person person2 = new Person();
+        person2.setId(2);
+        person2.setFirstName("Jane");
+        person2.setNationalId(67890);
+
+        List<Person> persons = Arrays.asList(person1, person2);
+
+        // Mock service method
+        when(personService.loadAll()).thenReturn(persons);
+
+        // Call the service method and assert the results
+        List<Person> result = personService.loadAll();
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertEquals("John", result.get(0).getFirstName());
+        assertEquals("Jane", result.get(1).getFirstName());
+    }
+
+    @Test
+    public void testAddPerson() {
+        // Prepare test data
+        String firstName = "Alice";
+        int nationalId = 54321;
+
+        // Mock service method
+        doNothing().when(personService).add(firstName, nationalId);
+
+        // Call the service method
+        personService.add(firstName, nationalId);
+
+        // Verify the service method was called
+        verify(personService, times(1)).add(firstName, nationalId);
+    }
+
+    @Test
+    public void testLoadAllPersons_EmptyList() {
+        // Mock service method to return an empty list
+        when(personService.loadAll()).thenReturn(Arrays.asList());
+
+        // Call the service method and assert the results
+        List<Person> result = personService.loadAll();
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testAddPerson_NullName() {
+        // Prepare test data
+        String firstName = null;
+        int nationalId = 54321;
+
+        // Mock service method
+        doThrow(new IllegalArgumentException("First name cannot be null")).when(personService).add(firstName, nationalId);
+
+        // Call the service method and assert the exception
+        assertThrows(IllegalArgumentException.class, () -> {
+            personService.add(firstName, nationalId);
+        });
+    }
+}

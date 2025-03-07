@@ -1,0 +1,65 @@
+```java
+package com.demo.service;
+
+import com.demo.domain.Person;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.*;
+
+@SpringBootTest(classes = MainApplication.class)
+class PersonServiceIntegrationTest {
+
+    @Autowired
+    private PersonService personService;
+
+    @MockBean
+    private JpaRepository<Person, Integer> personRepository;
+
+    @Test
+    void add_validInput_savesPerson() {
+        ArgumentCaptor<Person> personCaptor = ArgumentCaptor.forClass(Person.class);
+        
+        personService.add("Alice", 123456);
+        
+        verify(personRepository).save(personCaptor.capture());
+        assertEquals("Alice", personCaptor.getValue().getFirstName());
+        assertEquals(123456, personCaptor.getValue().getNationalId());
+    }
+
+    @Test
+    void loadAll_returnsPersonsFromRepository() {
+        Person mockPerson = new Person();
+        mockPerson.setFirstName("Bob");
+        when(personRepository.findAll()).thenReturn(List.of(mockPerson));
+        
+        List<Person> result = personService.loadAll();
+        
+        assertEquals(1, result.size());
+        assertEquals("Bob", result.get(0).getFirstName());
+    }
+
+    @Test
+    void add_edgeCaseNationalId_handlesMaxValue() {
+        personService.add("Charlie", Integer.MAX_VALUE);
+        
+        ArgumentCaptor<Person> captor = ArgumentCaptor.forClass(Person.class);
+        verify(personRepository).save(captor.capture());
+        assertEquals(Integer.MAX_VALUE, captor.getValue().getNationalId());
+    }
+
+    @Test
+    void add_invalidNationalId_persistsNegativeValue() {
+        personService.add("Dave", -1);
+        
+        ArgumentCaptor<Person> captor = ArgumentCaptor.forClass(Person.class);
+        verify(personRepository).save(captor.capture());
+        assertEquals(-1, captor.getValue().getNationalId());
+    }
+}
+```
