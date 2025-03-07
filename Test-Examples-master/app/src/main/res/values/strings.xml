@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Tests</string>
+    <string name="validation_error">Validation error!!!</string>
+    <string name="success">Success</string>
+    <string name="status">Status</string>
+    <string name="check">Check</string>
+    <string name="text">Text</string>
+    <string name="email">Email</string>
+</resources>

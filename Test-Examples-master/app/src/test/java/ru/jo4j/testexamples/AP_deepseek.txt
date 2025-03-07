@@ -1,0 +1,81 @@
+```java
+package ru.jo4j.testexamples;
+
+import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.Espresso;
+import androidx.test.espresso.action.ViewActions;
+import androidx.test.espresso.assertion.ViewAssertions;
+import androidx.test.espresso.matcher.ViewMatchers;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+
+@RunWith(AndroidJUnit4.class)
+public class MainActivityIntegrationTest {
+
+    @Test
+    public void validEmail_showsSuccessStatus() {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            // Enter valid email and trigger validation
+            Espresso.onView(withId(R.id.email))
+                .perform(ViewActions.replaceText("test@example.com"));
+            Espresso.onView(withId(R.id.check)).perform(ViewActions.click());
+            
+            // Verify success status
+            Espresso.onView(withId(R.id.status))
+                .check(ViewAssertions.matches(
+                    ViewMatchers.withText(R.string.success)
+                ));
+        }
+    }
+
+    @Test
+    public void invalidEmail_showsValidationError() {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            // Enter invalid email
+            Espresso.onView(withId(R.id.email))
+                .perform(ViewActions.replaceText("invalid-email"));
+            Espresso.onView(withId(R.id.check)).perform(ViewActions.click());
+            
+            // Verify error status
+            Espresso.onView(withId(R.id.status))
+                .check(ViewAssertions.matches(
+                    ViewMatchers.withText(R.string.validation_error)
+                ));
+        }
+    }
+
+    @Test
+    public void emptyEmailField_showsValidationError() {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            // Clear email field and trigger validation
+            Espresso.onView(withId(R.id.email))
+                .perform(ViewActions.replaceText(""));
+            Espresso.onView(withId(R.id.check)).perform(ViewActions.click());
+            
+            // Verify error status
+            Espresso.onView(withId(R.id.status))
+                .check(ViewAssertions.matches(
+                    ViewMatchers.withText(R.string.validation_error)
+                ));
+        }
+    }
+
+    @Test
+    public void malformedEmail_showsValidationError() {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            // Enter malformed email
+            Espresso.onView(withId(R.id.email))
+                .perform(ViewActions.replaceText("user@.com"));
+            Espresso.onView(withId(R.id.check)).perform(ViewActions.click());
+            
+            // Verify error status
+            Espresso.onView(withId(R.id.status))
+                .check(ViewAssertions.matches(
+                    ViewMatchers.withText(R.string.validation_error)
+                ));
+        }
+    }
+}
+```
