@@ -1,0 +1,55 @@
+```java
+package com.mts.metric.spark.service;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.mts.metric.spark.testutils.facade.TestAerospikeFacade;
+import com.mts.metric.spark.testutils.facade.TestHiveUtils;
+import com.mts.metric.spark.testutils.facade.table.SubscriberInfo;
+import com.mts.metric.spark.testutils.suite.SparkIntegrationSuite;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+class EnricherServiceIntegrationTest extends SparkIntegrationSuite {
+
+    @Autowired
+    private EnricherService enricherService;
+
+    @Autowired
+    private TestHiveUtils testHiveUtils;
+
+    @Autowired
+    private TestAerospikeFacade testAerospikeFacade;
+
+    private static final String AEROSPIKE_NAMESPACE = "test_namespace";
+    private static final String TEST_SUBSCRIBER_ID = "test_sub_123";
+    private static final String TEST_MSISDN = "79998887766";
+
+    @BeforeEach
+    void setup() {
+        testHiveUtils.cleanHive();
+        testAerospikeFacade.deleteAll(AEROSPIKE_NAMESPACE);
+
+        testHiveUtils.insertInto(SubscriberInfo.subscriberInfo())
+            .values(new SubscriberInfo.Values()
+                .setSubscriberId(TEST_SUBSCRIBER_ID)
+                .setMsisdn(TEST_MSISDN)
+            );
+    }
+
+    @Test
+    void proceedEnrichment_ValidHiveData_WritesToAerospike() {
+        enricherService.proceedEnrichment();
+
+        var aerospikeRecords = testAerospikeFacade.scanAll(AEROSPIKE_NAMESPACE);
+        assertEquals(1, aerospikeRecords.size());
+
+        var record = aerospikeRecords.get(0).record;
+        assertTrue(record.bins.containsKey("subscriber_id"));
+        assertEquals(TEST_SUBSCRIBER_ID, record.bins.get("subscriber_id"));
+        assertEquals(TEST_MSISDN, record.bins.get("msisdn"));
+    }
+}
+```

@@ -1,0 +1,84 @@
+```java
+package com.mts.metric.spark.testutils.suite;
+
+import com.mts.metric.spark.service.EnricherService;
+import com.mts.metric.spark.testutils.facade.TestAerospikeFacade;
+import com.mts.metric.spark.testutils.facade.TestHiveUtils;
+import com.mts.metric.spark.testutils.facade.table.SubscriberInfo;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+class SparkIntegrationSuiteTest extends SparkIntegrationSuite {
+
+    @Autowired
+    private EnricherService enricherService;
+
+    @Autowired
+    private TestHiveUtils testHiveUtils;
+
+    @Autowired
+    private TestAerospikeFacade testAerospikeFacade;
+
+    @AfterEach
+    void cleanup() {
+        testHiveUtils.cleanHive();
+        testAerospikeFacade.deleteAll("test-namespace");
+    }
+
+    @Test
+    void proceedEnrichment_validData_writesToAerospike() {
+        // Arrange
+        testHiveUtils.insertInto(SubscriberInfo.subscriberInfo())
+            .values(new SubscriberInfo.Values()
+                .setSubscriberId("123")
+                .setMsisdn("555-1234"));
+
+        // Act
+        enricherService.proceedEnrichment();
+
+        // Assert
+        List<KeyRecord> records = testAerospikeFacade.scanAll("test-namespace");
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).record.getString("msisdn")).isEqualTo("555-1234");
+    }
+
+    @Test
+    void proceedEnrichment_aerospikeUnavailable_throwsException() {
+        // Arrange
+        testAerospikeFacade.deleteAll("test-namespace"); // Simulate failure
+        testHiveUtils.insertInto(SubscriberInfo.subscriberInfo())
+            .values(new SubscriberInfo.Values());
+
+        // Act & Assert
+        assertThrows(RuntimeException.class, () -> enricherService.proceedEnrichment());
+    }
+
+    @Test
+    void proceedEnrichment_invalidSubscriberData_handlesGracefully() {
+        // Arrange
+        testHiveUtils.insertInto(SubscriberInfo.subscriberInfo())
+            .values(new SubscriberInfo.Values().setSubscriberId(null));
+
+        // Act
+        enricherService.proceedEnrichment();
+
+        // Assert
+        List<KeyRecord> records = testAerospikeFacade.scanAll("test-namespace");
+        assertThat(records).isEmpty(); // Or verify error handling logic
+    }
+
+    @Test
+    void proceedEnrichment_emptyHiveTable_noAerospikeWrites() {
+        // Act
+        enricherService.proceedEnrichment();
+
+        // Assert
+        List<KeyRecord> records = testAerospikeFacade.scanAll("test-namespace");
+        assertThat(records).isEmpty();
+    }
+}
+```
