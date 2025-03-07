@@ -1,0 +1,229 @@
+```
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBScanExpression;
+import com.amazonaws.services.dynamodbv2.datamodeling.PaginatedList;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapperConfig;
+
+import nz.mikhailov.example.Application;
+import nz.mikhailov.example.customer.Customer;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+@SpringBootTest(classes = Application.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+public class CustomerIntegrationTest {
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    @MockBean
+    private DynamoDBMapper dbMapper;
+
+    private Customer sampleCustomer;
+
+    @BeforeEach
+    public void setUp() {
+        sampleCustomer = new Customer();
+        sampleCustomer.setName("Alice");
+        sampleCustomer.setAddress("123 Main St");
+        sampleCustomer.setPhoneNumber("555-1234");
+    }
+
+    @Test
+    public void testListCustomersEmpty() {
+        PaginatedList<Customer> emptyList = mock(PaginatedList.class);
+        when(emptyList.loadAllResults()).thenReturn(null);
+        when(emptyList.isEmpty()).thenReturn(true);
+        when(dbMapper.scan(eq(Customer.class), any(DynamoDBScanExpression.class))).thenReturn(emptyList);
+
+        ResponseEntity<Customer[]> response = restTemplate.getForEntity("/v1/customer", Customer[].class);
+        assertEquals(204, response.getStatusCodeValue());
+    }
+
+    @Test
+    public void testListCustomersWithData() {
+        PaginatedList<Customer> listWithData = mock(PaginatedList.class);
+        List<Customer> customers = new ArrayList<>();
+        customers.add(sampleCustomer);
+        when(listWithData.loadAllResults()).thenReturn(null);
+        when(listWithData.isEmpty()).thenReturn(false);
+        when(listWithData.size()).thenReturn(1);
+        when(listWithData.get(0)).thenReturn(sampleCustomer);
+        when(dbMapper.scan(eq(Customer.class), any(DynamoDBScanExpression.class))).thenReturn(listWithData);
+
+        ResponseEntity<Customer[]> response = restTemplate.getForEntity("/v1/customer", Customer[].class);
+        assertEquals(200, response.getStatusCodeValue());
+        Customer[] result = response.getBody();
+        assertNotNull(result);
+        assertEquals(1, result.length);
+        assertEquals("Alice", result[0].getName());
+    }
+
+    @Test
+    public void testReadCustomerFound() {
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(sampleCustomer);
+        ResponseEntity<Customer> response = restTemplate.getForEntity("/v1/customer/Alice", Customer.class);
+        assertEquals(200, response.getStatusCodeValue());
+        Customer customer = response.getBody();
+        assertNotNull(customer);
+        assertEquals("Alice", customer.getName());
+    }
+
+    @Test
+    public void testReadCustomerNotFound() {
+        when(dbMapper.load(Customer.class, "Bob")).thenReturn(null);
+        ResponseEntity<Customer> response = restTemplate.getForEntity("/v1/customer/Bob", Customer.class);
+        assertEquals(404, response.getStatusCodeValue());
+    }
+
+    @Test
+    public void testCreateCustomerSuccess() {
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(null);
+        doNothing().when(dbMapper).save(any(Customer.class));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Customer> request = new HttpEntity<>(sampleCustomer, headers);
+
+        ResponseEntity<Customer> response = restTemplate.postForEntity("/v1/customer", request, Customer.class);
+        assertEquals(201, response.getStatusCodeValue());
+        Customer created = response.getBody();
+        assertNotNull(created);
+        assertEquals("Alice", created.getName());
+    }
+
+    @Test
+    public void testCreateCustomerConflict() {
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(sampleCustomer);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Customer> request = new HttpEntity<>(sampleCustomer, headers);
+
+        ResponseEntity<Customer> response = restTemplate.postForEntity("/v1/customer", request, Customer.class);
+        assertEquals(409, response.getStatusCodeValue());
+    }
+
+    @Test
+    public void testReplaceCustomerSuccess() {
+        Customer existingCustomer = new Customer();
+        existingCustomer.setName("Alice");
+        existingCustomer.setAddress("Old Address");
+        existingCustomer.setPhoneNumber("000-0000");
+
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(existingCustomer);
+        doNothing().when(dbMapper).save(any(Customer.class));
+
+        Customer updateData = new Customer();
+        updateData.setAddress("New Address");
+        updateData.setPhoneNumber("111-1111");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Customer> request = new HttpEntity<>(updateData, headers);
+
+        ResponseEntity<Customer> response = restTemplate.exchange("/v1/customer/Alice", HttpMethod.PUT, request, Customer.class);
+        assertEquals(200, response.getStatusCodeValue());
+        Customer updated = response.getBody();
+        assertNotNull(updated);
+        assertEquals("Alice", updated.getName());
+        assertEquals("New Address", updated.getAddress());
+        assertEquals("111-1111", updated.getPhoneNumber());
+    }
+
+    @Test
+    public void testReplaceCustomerNotFound() {
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(null);
+
+        Customer updateData = new Customer();
+        updateData.setAddress("New Address");
+        updateData.setPhoneNumber("111-1111");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Customer> request = new HttpEntity<>(updateData, headers);
+
+        ResponseEntity<Customer> response = restTemplate.exchange("/v1/customer/Alice", HttpMethod.PUT, request, Customer.class);
+        assertEquals(404, response.getStatusCodeValue());
+    }
+
+    @Test
+    public void testUpdateCustomerSuccess() {
+        Customer existingCustomer = new Customer();
+        existingCustomer.setName("Alice");
+        existingCustomer.setAddress("Old Address");
+        existingCustomer.setPhoneNumber("000-0000");
+
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(existingCustomer);
+        doNothing().when(dbMapper).save(any(Customer.class));
+
+        Customer updateData = new Customer();
+        updateData.setAddress("Updated Address");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Customer> request = new HttpEntity<>(updateData, headers);
+
+        ResponseEntity<Customer> response = restTemplate.exchange("/v1/customer/Alice", HttpMethod.PATCH, request, Customer.class);
+        assertEquals(200, response.getStatusCodeValue());
+        Customer updated = response.getBody();
+        assertNotNull(updated);
+        assertEquals("Alice", updated.getName());
+        assertEquals("Updated Address", updated.getAddress());
+        assertEquals("000-0000", updated.getPhoneNumber());
+    }
+
+    @Test
+    public void testUpdateCustomerNotFound() {
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(null);
+
+        Customer updateData = new Customer();
+        updateData.setAddress("Updated Address");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Customer> request = new HttpEntity<>(updateData, headers);
+
+        ResponseEntity<Customer> response = restTemplate.exchange("/v1/customer/Alice", HttpMethod.PATCH, request, Customer.class);
+        assertEquals(404, response.getStatusCodeValue());
+    }
+
+    @Test
+    public void testDeleteCustomerSuccess() {
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(sampleCustomer);
+        doNothing().when(dbMapper).delete(any(Customer.class), any(DynamoDBMapperConfig.class));
+
+        ResponseEntity<Void> response = restTemplate.exchange("/v1/customer/Alice", HttpMethod.DELETE, null, Void.class);
+        assertEquals(204, response.getStatusCodeValue());
+    }
+
+    @Test
+    public void testDeleteCustomerNotFound() {
+        when(dbMapper.load(Customer.class, "Alice")).thenReturn(null);
+
+        ResponseEntity<Void> response = restTemplate.exchange("/v1/customer/Alice", HttpMethod.DELETE, null, Void.class);
+        assertEquals(404, response.getStatusCodeValue());
+    }
+}
+```

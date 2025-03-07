@@ -1,0 +1,33 @@
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.ResponseEntity;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+public class HealthCheckIntegrationTest {
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    @BeforeEach
+    public void setUp() {
+        // Placeholder for additional setup if required
+    }
+
+    @Test
+    public void testHealthCheckEndpoint() {
+        ResponseEntity<String> response = restTemplate.getForEntity("/health", String.class);
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("up", response.getBody());
+    }
+
+    @Test
+    public void testNonExistingEndpoint() {
+        ResponseEntity<String> response = restTemplate.getForEntity("/non-existent", String.class);
+        assertEquals(404, response.getStatusCodeValue());
+    }
+}

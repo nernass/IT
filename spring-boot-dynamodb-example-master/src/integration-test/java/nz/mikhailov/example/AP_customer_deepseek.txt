@@ -1,0 +1,96 @@
+package nz.mikhailov.example.customer;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import java.util.Collections;
+import java.util.Optional;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class CustomerIntegrationTest {
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    @MockBean
+    private CustomerRepository repository;
+
+    private final Customer validCustomer = new Customer()
+        .withName("John Doe")
+        .withAddress("123 Street")
+        .withPhoneNumber("555-1234");
+
+    @Test
+    void createCustomer_validInput_returnsCreated() {
+        when(repository.read("John Doe")).thenReturn(Optional.empty());
+        when(repository.readAll()).thenReturn(Collections.emptyList());
+
+        ResponseEntity<Customer> response = restTemplate.postForEntity(
+            "/v1/customer", validCustomer, Customer.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(response.getBody()).usingRecursiveComparison().isEqualTo(validCustomer);
+    }
+
+    @Test
+    void createCustomer_duplicateName_returnsConflict() {
+        when(repository.read("John Doe")).thenReturn(Optional.of(validCustomer));
+
+        ResponseEntity<Customer> response = restTemplate.postForEntity(
+            "/v1/customer", validCustomer, Customer.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void getCustomer_nonExistentName_returnsNotFound() {
+        when(repository.read("Unknown")).thenReturn(Optional.empty());
+
+        ResponseEntity<Customer> response = restTemplate.getForEntity(
+            "/v1/customer/Unknown", Customer.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void updateCustomer_validInput_returnsOk() {
+        Customer updated = validCustomer.withAddress("456 Avenue");
+        when(repository.read("John Doe")).thenReturn(Optional.of(validCustomer));
+
+        ResponseEntity<Customer> response = restTemplate.exchange(
+            "/v1/customer/John Doe", HttpMethod.PUT,
+            new HttpEntity<>(updated), Customer.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().getAddress()).isEqualTo("456 Avenue");
+    }
+
+    @Test
+    void deleteCustomer_existingName_returnsNoContent() {
+        when(repository.read("John Doe")).thenReturn(Optional.of(validCustomer));
+
+        ResponseEntity<Void> response = restTemplate.exchange(
+            "/v1/customer/John Doe", HttpMethod.DELETE, null, Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    @Test
+    void createCustomer_missingName_returnsBadRequest() {
+        Customer invalidCustomer = new Customer().withAddress("123 Street");
+
+        ResponseEntity<String> response = restTemplate.postForEntity(
+            "/v1/customer", invalidCustomer, String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+}
