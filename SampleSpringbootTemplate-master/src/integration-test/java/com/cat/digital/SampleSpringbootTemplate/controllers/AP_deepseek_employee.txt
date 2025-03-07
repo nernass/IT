@@ -1,0 +1,87 @@
+```java
+package com.cat.digital.SampleSpringbootTemplate.controllers;
+
+import com.cat.digital.SampleSpringbootTemplate.clients.dto.DummyEmployee;
+import com.cat.digital.SampleSpringbootTemplate.clients.dto.response.DummyEmployeeResponse;
+import com.cat.digital.SampleSpringbootTemplate.dtos.response.EmployeeResponseDto;
+import com.cat.digital.SampleSpringbootTemplate.services.EmployeeService;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import java.util.Collections;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(EmployeeController.class)
+class EmployeeControllerIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private EmployeeService employeeService;
+
+    @Test
+    void getAllEmployees_validRequest_returnsMappedDtos() throws Exception {
+        EmployeeResponseDto mockDto = EmployeeResponseDto.builder()
+            .id("1")
+            .employeeName("John Doe")
+            .build();
+
+        Mockito.when(employeeService.getAllEmployees())
+            .thenReturn(Collections.singletonList(mockDto));
+
+        mockMvc.perform(get("/employees"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(1)))
+            .andExpect(jsonPath("$[0].employeeName").value("John Doe"));
+    }
+
+    @Test
+    void getAllEmployees_emptyResponse_returnsEmptyArray() throws Exception {
+        Mockito.when(employeeService.getAllEmployees())
+            .thenReturn(Collections.emptyList());
+
+        mockMvc.perform(get("/employees"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void getAllEmployees_serviceThrowsError_returnsInternalError() throws Exception {
+        Mockito.when(employeeService.getAllEmployees())
+            .thenThrow(new RuntimeException("External API failure"));
+
+        mockMvc.perform(get("/employees"))
+            .andExpect(status().is5xxServerError());
+    }
+
+    @Test
+    void getAllEmployees_invalidDataMapping_returnsValidStructure() throws Exception {
+        DummyEmployee dummy = new DummyEmployee();
+        dummy.setEmployeeName("Jane Doe");
+        dummy.setId("2");
+
+        DummyEmployeeResponse mockResponse = DummyEmployeeResponse.builder()
+            .data(Collections.singletonList(dummy))
+            .build();
+
+        Mockito.when(employeeService.getAllEmployees())
+            .thenReturn(Collections.singletonList(
+                EmployeeResponseDto.builder()
+                    .id("2")
+                    .employeeName("Jane Doe")
+                    .build()
+            ));
+
+        mockMvc.perform(get("/employees"))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$[0].id").value("2"));
+    }
+}
+```
