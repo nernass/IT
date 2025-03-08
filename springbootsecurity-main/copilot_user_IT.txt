@@ -1,0 +1,206 @@
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import org.springframework.web.context.WebApplicationContext;
+
+import com.springboot.springbootsecurity.auth.model.Token;
+import com.springboot.springbootsecurity.auth.model.dto.request.LoginRequest;
+import com.springboot.springbootsecurity.auth.model.dto.request.TokenInvalidateRequest;
+import com.springboot.springbootsecurity.auth.model.dto.request.TokenRefreshRequest;
+import com.springboot.springbootsecurity.auth.model.dto.response.TokenResponse;
+import com.springboot.springbootsecurity.auth.model.mapper.TokenToTokenResponseMapper;
+import com.springboot.springbootsecurity.user.controller.UserAuthController;
+import com.springboot.springbootsecurity.user.model.dto.request.UserRegisterRequest;
+import com.springboot.springbootsecurity.user.service.UserLoginService;
+import com.springboot.springbootsecurity.user.service.UserLogoutService;
+import com.springboot.springbootsecurity.user.service.UserRefreshTokenService;
+import com.springboot.springbootsecurity.user.service.UserRegisterService;
+
+@SpringBootTest
+@ExtendWith(MockitoExtension.class)
+@TestPropertySource(locations = "classpath:application-test.properties")
+public class UserAuthIntegrationTest {
+
+    @Autowired
+    private WebApplicationContext context;
+
+    private MockMvc mockMvc;
+
+    @MockBean
+    private UserRegisterService userRegisterService;
+
+    @MockBean
+    private UserLoginService userLoginService;
+
+    @MockBean
+    private UserRefreshTokenService userRefreshTokenService;
+
+    @MockBean
+    private UserLogoutService userLogoutService;
+
+    @MockBean
+    private TokenToTokenResponseMapper tokenToTokenResponseMapper;
+
+    @BeforeEach
+    public void setup() {
+        // Initialize MockMvc object
+        mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
+
+        // Placeholder for mocking service methods
+        // e.g., Mockito.when(userRegisterService.registerUser(Mockito.any())).thenReturn(new User());
+    }
+
+    @Test
+    public void testRegisterUser_Success() throws Exception {
+        // Prepare test data
+        UserRegisterRequest request = UserRegisterRequest.builder()
+                .email("test@example.com")
+                .password("password123")
+                .firstName("John")
+                .lastName("Doe")
+                .phoneNumber("1234567890")
+                .build();
+
+        // Mock service method
+        Mockito.when(userRegisterService.registerUser(Mockito.any(UserRegisterRequest.class))).thenReturn(null);
+
+        // Perform POST /api/v1/authentication/user/register
+        mockMvc.perform(post("/api/v1/authentication/user/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"test@example.com\",\"password\":\"password123\",\"firstName\":\"John\",\"lastName\":\"Doe\",\"phoneNumber\":\"1234567890\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    public void testLoginUser_Success() throws Exception {
+        // Prepare test data
+        LoginRequest request = LoginRequest.builder()
+                .email("test@example.com")
+                .password("password123")
+                .build();
+
+        Token token = Token.builder()
+                .accessToken("access-token")
+                .accessTokenExpiresAt(System.currentTimeMillis() + 3600_000)
+                .refreshToken("refresh-token")
+                .build();
+
+        TokenResponse tokenResponse = TokenResponse.builder()
+                .accessToken(token.getAccessToken())
+                .accessTokenExpiresAt(token.getAccessTokenExpiresAt())
+                .refreshToken(token.getRefreshToken())
+                .build();
+
+        // Mock service methods
+        Mockito.when(userLoginService.login(Mockito.any(LoginRequest.class))).thenReturn(token);
+        Mockito.when(tokenToTokenResponseMapper.map(Mockito.any(Token.class))).thenReturn(tokenResponse);
+
+        // Perform POST /api/v1/authentication/user/login
+        mockMvc.perform(post("/api/v1/authentication/user/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"test@example.com\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.data.refreshToken").value("refresh-token"));
+    }
+
+    @Test
+    public void testRefreshToken_Success() throws Exception {
+        // Prepare test data
+        TokenRefreshRequest request = new TokenRefreshRequest("refresh-token");
+
+        Token token = Token.builder()
+                .accessToken("new-access-token")
+                .accessTokenExpiresAt(System.currentTimeMillis() + 3600_000)
+                .refreshToken("new-refresh-token")
+                .build();
+
+        TokenResponse tokenResponse = TokenResponse.builder()
+                .accessToken(token.getAccessToken())
+                .accessTokenExpiresAt(token.getAccessTokenExpiresAt())
+                .refreshToken(token.getRefreshToken())
+                .build();
+
+        // Mock service methods
+        Mockito.when(userRefreshTokenService.refreshToken(Mockito.any(TokenRefreshRequest.class))).thenReturn(token);
+        Mockito.when(tokenToTokenResponseMapper.map(Mockito.any(Token.class))).thenReturn(tokenResponse);
+
+        // Perform POST /api/v1/authentication/user/refresh-token
+        mockMvc.perform(post("/api/v1/authentication/user/refresh-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"refresh-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
+                .andExpect(jsonPath("$.data.refreshToken").value("new-refresh-token"));
+    }
+
+    @Test
+    public void testLogout_Success() throws Exception {
+        // Prepare test data
+        TokenInvalidateRequest request = new TokenInvalidateRequest("access-token");
+
+        // Mock service method
+        Mockito.doNothing().when(userLogoutService).logout(Mockito.any(TokenInvalidateRequest.class));
+
+        // Perform POST /api/v1/authentication/user/logout
+        mockMvc.perform(post("/api/v1/authentication/user/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"accessToken\":\"access-token\"}"))
+                .andExpect(status().isOk());
+    }
+
+    // Additional tests for error handling and invalid inputs
+
+    @Test
+    public void testRegisterUser_InvalidInput() throws Exception {
+        // Perform POST /api/v1/authentication/user/register with invalid data
+        mockMvc.perform(post("/api/v1/authentication/user/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"invalid-email\",\"password\":\"123\",\"firstName\":\"\",\"lastName\":\"\",\"phoneNumber\":\"abc\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void testLoginUser_InvalidCredentials() throws Exception {
+        // Mock service method to throw an exception
+        Mockito.when(userLoginService.login(Mockito.any(LoginRequest.class)))
+                .thenThrow(new RuntimeException("Invalid credentials"));
+
+        // Perform POST /api/v1/authentication/user/login
+        mockMvc.perform(post("/api/v1/authentication/user/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"test@example.com\",\"password\":\"wrongpassword\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    public void testRefreshToken_InvalidToken() throws Exception {
+        // Mock service method to throw an exception
+        Mockito.when(userRefreshTokenService.refreshToken(Mockito.any(TokenRefreshRequest.class)))
+                .thenThrow(new RuntimeException("Invalid refresh token"));
+
+        // Perform POST /api/v1/authentication/user/refresh-token
+        mockMvc.perform(post("/api/v1/authentication/user/refresh-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"invalid-refresh-token\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+}
