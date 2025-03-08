@@ -1,0 +1,124 @@
+```java
+package com.github.kaiwinter.testcontainers.wildfly.core;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.lang.reflect.Field;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.MariaDBContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import com.github.kaiwinter.testcontainers.wildfly.db.UserRepository;
+import com.github.kaiwinter.testcontainers.wildfly.db.entity.User;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Persistence;
+
+@Testcontainers
+class UserServiceIntegrationTest {
+
+    @Container
+    private static final MariaDBContainer<?> mariaDB = new MariaDBContainer<>("mariadb:10.2")
+        .withDatabaseName("testdb")
+        .withUsername("testuser")
+        .withPassword("testpass");
+
+    private static EntityManagerFactory emf;
+    private EntityManager em;
+    private UserRepository userRepository;
+    private UserService userService;
+
+    @BeforeAll
+    static void setupAll() {
+        Map<String, String> props = new HashMap<>();
+        props.put("jakarta.persistence.jdbc.url", mariaDB.getJdbcUrl());
+        props.put("jakarta.persistence.jdbc.user", mariaDB.getUsername());
+        props.put("jakarta.persistence.jdbc.password", mariaDB.getPassword());
+        props.put("jakarta.persistence.jdbc.driver", mariaDB.getDriverClassName());
+        props.put("hibernate.hbm2ddl.auto", "create-drop");
+        
+        emf = Persistence.createEntityManagerFactory("DS", props);
+    }
+
+    @BeforeEach
+    void setup() throws Exception {
+        em = emf.createEntityManager();
+        userRepository = new UserRepository();
+        injectEntityManager(userRepository);
+        
+        userService = new UserService();
+        injectUserRepository(userService);
+    }
+
+    private void injectEntityManager(UserRepository repository) throws Exception {
+        Field field = UserRepository.class.getDeclaredField("entityManager");
+        field.setAccessible(true);
+        field.set(repository, em);
+    }
+
+    private void injectUserRepository(UserService service) throws Exception {
+        Field field = UserService.class.getDeclaredField("userRepository");
+        field.setAccessible(true);
+        field.set(service, userRepository);
+    }
+
+    @Test
+    void calculateSumOfLogins_WithUsers_ReturnsCorrectSum() {
+        persistUsers(3, 5);
+
+        int sum = userService.calculateSumOfLogins();
+        assertEquals(8, sum);
+    }
+
+    @Test
+    void resetLoginCountForUsers_ExcludesRootAdmin() {
+        User regularUser = createUser("user1", 3);
+        User adminUser = createUser("admin", 5);
+        persistUsers(regularUser, adminUser);
+
+        userRepository.resetLoginCountForUsers();
+
+        em.clear();
+        assertEquals(0, userRepository.find(regularUser.getId()).getLoginCount());
+        assertEquals(5, userRepository.find(adminUser.getId()).getLoginCount());
+    }
+
+    private void persistUsers(User... users) {
+        em.getTransaction().begin();
+        for (User user : users) {
+            userRepository.save(user);
+        }
+        em.getTransaction().commit();
+    }
+
+    private User createUser(String username, int loginCount) {
+        User user = new User();
+        user.setUsername(username);
+        user.setLoginCount(loginCount);
+        return user;
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (em != null && em.isOpen()) {
+            em.close();
+        }
+    }
+
+    @AfterAll
+    static void tearDownAll() {
+        if (emf != null) {
+            emf.close();
+        }
+    }
+}
+```

@@ -1,0 +1,83 @@
+```java
+package com.github.kaiwinter.testcontainers.wildfly.core;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Persistence;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import com.github.kaiwinter.testcontainers.wildfly.db.UserRepository;
+import com.github.kaiwinter.testcontainers.wildfly.db.entity.User;
+
+class UserServiceIntegrationTest {
+
+    private static EntityManagerFactory emf;
+    private static EntityManager em;
+    private static UserRepository userRepository;
+    private static UserService userService;
+
+    @BeforeAll
+    static void setup() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("jakarta.persistence.jdbc.url", "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1");
+        properties.put("jakarta.persistence.jdbc.user", "sa");
+        properties.put("jakarta.persistence.jdbc.password", "");
+        properties.put("hibernate.hbm2ddl.auto", "create-drop");
+        properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+
+        emf = Persistence.createEntityManagerFactory("DS", properties);
+        em = emf.createEntityManager();
+        userRepository = new UserRepository();
+        userRepository.entityManager = em; // Inject EntityManager
+        userService = new UserService();
+        userService.userRepository = userRepository; // Inject repository
+    }
+
+    @Test
+    void calculateSumOfLogins_validUsers_returnsSum() {
+        // Arrange
+        em.getTransaction().begin();
+        User user1 = createUser("user1", 3);
+        User user2 = createUser("user2", 5);
+        em.persist(user1);
+        em.persist(user2);
+        em.getTransaction().commit();
+
+        // Act
+        int sum = userService.calculateSumOfLogins();
+
+        // Assert
+        assertEquals(8, sum);
+    }
+
+    @Test
+    void calculateSumOfLogins_emptyDatabase_returnsZero() {
+        // Act
+        int sum = userService.calculateSumOfLogins();
+
+        // Assert
+        assertEquals(0, sum);
+    }
+
+    private User createUser(String username, int loginCount) {
+        User user = new User();
+        user.setUsername(username);
+        user.setLoginCount(loginCount);
+        return user;
+    }
+
+    @AfterAll
+    static void tearDown() {
+        em.close();
+        emf.close();
+    }
+}
+```

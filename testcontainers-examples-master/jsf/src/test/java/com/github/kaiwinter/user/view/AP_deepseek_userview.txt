@@ -1,0 +1,63 @@
+```java
+package com.github.kaiwinter.user.view;
+
+import com.github.kaiwinter.user.User;
+import com.github.kaiwinter.user.service.UserService;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import java.util.List;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class UserViewIntegrationTest {
+
+    @Mock
+    private UserService userService;
+
+    @InjectMocks
+    private UserView userView;
+
+    @Test
+    void getUsers_validRequest_returnsTop5Users() {
+        List<User> mockUsers = List.of(
+            new User(0, "User 0"),
+            new User(1, "User 1")
+        );
+        
+        when(userService.getTopUsers(5)).thenReturn(mockUsers);
+        
+        List<User> result = userView.getUsers();
+        assertEquals(2, result.size());
+        assertEquals("User 1", result.get(1).getName());
+    }
+
+    @Test
+    void getUsers_serviceReturnsEmptyList_handlesGracefully() {
+        when(userService.getTopUsers(5)).thenReturn(List.of());
+        
+        List<User> result = userView.getUsers();
+        assertEquals(0, result.size());
+    }
+
+    @Test
+    void getUsers_serviceThrowsException_propagatesError() {
+        when(userService.getTopUsers(5))
+            .thenThrow(new RuntimeException("Database error"));
+        
+        assertThrows(RuntimeException.class, () -> userView.getUsers());
+    }
+
+    @Test
+    void getUsers_edgeCaseZeroUsers_returnsEmptyList() {
+        when(userService.getTopUsers(5)).thenReturn(List.of());
+        
+        List<User> result = userView.getUsers();
+        assertEquals(0, result.size());
+    }
+}
+```
