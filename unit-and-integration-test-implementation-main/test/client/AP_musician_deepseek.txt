@@ -1,0 +1,64 @@
+```python
+import pytest
+import requests
+from unittest.mock import patch
+from src.config.external_musicians_client_config import ExternalMusicianClientConfig
+from src.external_musician_client import ExternalMusicianClient
+from abstract_integration_test_class import AbstractIntegrationTestClass
+
+class TestExternalMusicianClientIntegration(AbstractIntegrationTestClass):
+    
+    @classmethod
+    def setup_class(cls):
+        super().setup()
+        cls.client_config = ExternalMusicianClientConfig(
+            url=cls.client_url, 
+            port=cls.client_port
+        )
+        cls.musician_client = ExternalMusicianClient(cls.client_config)
+
+    @classmethod
+    def teardown_class(cls):
+        super().tear_down()
+
+    def test_get_all_musicians_names_success(self):
+        # Test normal successful response
+        result = self.musician_client.get_all_musicians_names()
+        assert result == ["kurt", "jim", "noel"]
+        assert self.server.get_request_count("/fetch-all-names") == 1
+
+    def test_get_all_musicians_names_server_error(self):
+        # Setup error response
+        self.server.reset()
+        self.server.add_json_response(
+            "/fetch-all-names", 
+            {"error": "Server error"}, 
+            status=500
+        )
+        
+        with pytest.raises(requests.exceptions.HTTPError):
+            self.musician_client.get_all_musicians_names()
+
+    def test_get_all_musicians_names_empty_response(self):
+        # Setup empty valid response
+        self.server.reset()
+        self.server.add_json_response(
+            "/fetch-all-names", 
+            {"musician_names": []}
+        )
+        
+        result = self.musician_client.get_all_musicians_names()
+        assert result == []
+
+    def test_get_all_musicians_names_connection_error(self):
+        # Simulate service unavailable
+        self.server.shutdown_server()
+        
+        with pytest.raises(requests.exceptions.ConnectionError):
+            self.musician_client.get_all_musicians_names()
+
+    def test_config_properly_initialized(self):
+        assert self.musician_client._ExternalMusicianClient__config.url == self.client_url
+        assert self.musician_client._ExternalMusicianClient__config.port == self.client_port
+        assert f"{self.client_url}:{self.client_port}/fetch-all-names" in self.server.base_url
+```

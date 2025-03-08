@@ -1,0 +1,59 @@
+import pytest
+import pandas as pd
+import psycopg2
+from unittest.mock import patch
+from src.musician_service import MusicianService
+from src.musician_repository import MusicianRepository
+from src.client.postgres_client import PostgresClient
+from src.client.external_musician_client import ExternalMusicianClient
+from src.config.postgres_client_config import PostgresClientConfig
+from src.config.external_musicians_client_config import ExternalMusicianClientConfig
+from test.abstract_integration_test_class import AbstractIntegrationTestClass
+
+class TestMusicianServiceIntegration(AbstractIntegrationTestClass):
+    @classmethod
+    def setup(cls):
+        super().setup()
+        cls.postgres_client = PostgresClient(cls.postgres_client_config)
+        cls.external_client = ExternalMusicianClient(cls.client_config)
+        cls.repository = MusicianRepository(cls.postgres_client)
+        cls.service = MusicianService(cls.repository, cls.external_client)
+        
+        conn = cls.create_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO test.musician (name, surname, age, instrument) VALUES ('kurt', 'cobain', 27, 'guitar')")
+        cursor.execute("INSERT INTO test.musician (name, surname, age, instrument) VALUES ('jim', 'morrison', 27, 'vocals')")
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    def test_get_all_musicians_success(self):
+        musicians = self.service.get_all_musicians()
+        assert len(musicians) == 2
+        assert {m.name.lower() for m in musicians} == {'kurt', 'jim'}
+
+    def test_external_client_failure_propagates(self):
+        with patch.object(ExternalMusicianClient, 'get_all_musicians_names', side_effect=Exception("API down")):
+            with pytest.raises(Exception, match="API down"):
+                self.service.get_all_musicians()
+
+    def test_save_invalid_age_rollback(self):
+        with pytest.raises(psycopg2.Error):
+            self.service.save("John", "Doe", "invalid_age", "Piano")
+        
+        conn = self.create_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM test.musician WHERE name = 'John'")
+        assert cursor.fetchone() is None
+        cursor.close()
+        conn.close()
+
+    @classmethod
+    def teardown_class(cls):
+        conn = cls.create_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM test.musician")
+        conn.commit()
+        cursor.close()
+        conn.close()
+        super().tear_down()

@@ -1,0 +1,64 @@
+import pytest
+import pandas as pd
+import psycopg2
+from src.config.postgres_client_config import PostgresClientConfig
+from src.postgres_client import PostgresClient
+from test.abstract_integration_test_class import AbstractIntegrationTestClass
+
+class TestPostgresClientIntegration(AbstractIntegrationTestClass):
+    @classmethod
+    def setup(cls):
+        super().setup()
+        conn = psycopg2.connect(
+            host=cls.postgres_url,
+            port=cls.postgres_port,
+            database=cls.postgres_database,
+            user=cls.postgres_user_name,
+            password=cls.postgres_password
+        )
+        cursor = conn.cursor()
+        cursor.execute("CREATE SCHEMA IF NOT EXISTS test;")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS test.musician (
+                name VARCHAR,
+                surname VARCHAR,
+                age INTEGER,
+                instrument VARCHAR
+            );
+        """)
+        conn.commit()
+        cursor.close()
+        conn.close()
+        cls.client = PostgresClient(cls.postgres_client_config)
+
+    def test_save_and_retrieve_musician_success(self):
+        df = pd.DataFrame({
+            'name': ['Kurt'],
+            'surname': ['Cobain'],
+            'age': [27],
+            'instrument': ['Guitar']
+        })
+        self.client.save(df)
+        result = self.client.retrieve_musician('Kurt')
+        assert not result.empty
+        assert result.iloc[0]['surname'] == 'Cobain'
+
+    def test_save_invalid_data_rollback(self):
+        df = pd.DataFrame({
+            'name': ['Jim'],
+            'surname': ['Morrison'],
+            'age': ['invalid'],  # Invalid age type
+            'instrument': ['Vocals']
+        })
+        with pytest.raises(psycopg2.Error):
+            self.client.save(df)
+        result = self.client.retrieve_musician('Jim')
+        assert result.empty
+
+    def test_retrieve_musicians_empty_list_raises_error(self):
+        with pytest.raises(psycopg2.ProgrammingError):
+            self.client.retrieve_musicians([])
+
+    @classmethod
+    def teardown_class(cls):
+        super().tear_down()
